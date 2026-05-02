@@ -1,1 +1,5 @@
-To jest test
+[
+  {"tool": "Git", "category": "Version Control", "status": "Active"},
+  {"tool": "Python", "category": "Processing", "status": "Pending"},
+  {"tool": "DuckDB", "category": "Database", "status": "Planned"}
+]
