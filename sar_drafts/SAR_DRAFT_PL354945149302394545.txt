@@ -1,0 +1,65 @@
+
+SUSPICIOUS ACTIVITY REPORT — DRAFT
+Generated: 2026-05-04 20:13
+Status: DRAFT — requires analyst review before submission
+Reference: SAR-DRAFT-PL35494514-20260504
+
+SUBJECT INFORMATION
+Account number : PL35494514930239454526246159
+Risk score     : 55/100
+Risk level     : MEDIUM
+Active signals : structuring (8 txn, +40) | velocity (5 txn/day, +15)
+
+TRANSACTION SUMMARY
+Total transactions : 26
+Total amount       : 187,341.93
+Period             : 2026-02-07 to 2026-05-02
+Currencies used    : CHF,PLN,USD,EUR
+Countries involved : PL
+Channels used      : ONLINE,BRANCH,ATM
+
+TOP TRANSACTIONS BY AMOUNT
+  2026-04-30T08:19     14,638.94 PLN  PL  ONLINE
+  2026-04-29T17:19     14,585.88 PLN  PL  ONLINE
+  2026-04-29T23:19     14,464.79 PLN  PL  ONLINE
+  2026-04-30T02:19     14,385.88 PLN  PL  ONLINE
+  2026-04-30T05:19     14,362.61 PLN  PL  ONLINE
+
+TYPOLOGY ASSESSMENT
+
+1. STRUCTURING: Multiple transactions detected below the PLN 15,000 mandatory reporting threshold (Art. 72, Polish AML Act 2018). Pattern consistent with deliberate avoidance of transaction reporting obligations.
+
+2. VELOCITY ANOMALY: Unusual transaction frequency detected within 24-hour windows. Pattern may indicate layering — rapid movement of funds to obscure origin trail.
+
+REGULATORY BASIS
+Primary    : Polish AML Act (Ustawa z dnia 1 marca 2018 r. o przeciwdziałaniu
+             praniu pieniędzy oraz finansowaniu terroryzmu)
+Secondary  : FATF Recommendations 2012 (updated 2023)
+             EU AMLD6 (Directive 2018/1673)
+             EU Delegated Regulation 2016/1675 (high-risk third countries)
+
+ANALYST SECTION — TO BE COMPLETED
+Investigation date    : _______________
+Analyst name          : _______________
+Case reference        : _______________
+
+Supporting evidence reviewed:
+  [ ] Transaction history verified
+  [ ] KYC/CDD documentation reviewed
+  [ ] Adverse media screening completed
+  [ ] PEP/Sanctions screening completed
+  [ ] Customer explanation obtained
+
+Narrative:
+  [ opisz okoliczności, wyjaśnienie klienta, ocenę wiarygodności ]
+
+Recommended action:
+  [ ] Submit SAR to GIIF (Generalny Inspektor Informacji Finansowej)
+  [ ] Enhanced Due Diligence — escalate to Senior Analyst
+  [ ] No SAR — document rationale below
+  [ ] Account restriction / exit
+
+Rationale for decision:
+  [ uzasadnienie decyzji ]
+
+Supervisor approval: _______________  Date: _______________
