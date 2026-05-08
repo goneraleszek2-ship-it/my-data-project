@@ -1,15 +1,18 @@
 # AML Transaction Monitoring Pipeline
 
-End-to-end financial crime detection pipeline built in Python and SQL.
-Covers the full AML workflow: from raw transaction data through typology
-detection, risk scoring, SAR draft generation, SQL performance analysis,
-to network graph analysis.
+End-to-end financial crime detection pipeline built in Python and SQL,
+exposing results via a REST API. Covers the full AML workflow: from raw
+transaction data through typology detection, risk scoring, SAR draft
+generation, SQL performance analysis, network graph analysis, to a
+queryable HTTP API.
 
 Built as a portfolio project demonstrating the intersection of AML domain
-knowledge and data engineering skills.
+knowledge, data engineering, and backend development skills.
 
 
-## Pipeline Architecture
+## Architecture
+
+Data Pipeline:
 
 generate.py -> load.py -> queries.py -> score.py -> sar.py
     |              |           |             |          |
@@ -18,23 +21,70 @@ generate.py -> load.py -> queries.py -> score.py -> sar.py
 
 graph_build.py -> graph_analyze.py
     |                    |
- DiGraph             PageRank
- 24 nodes            Betweenness
- 244 edges           Communities
-                     Blind spots
+ DiGraph             PageRank, Betweenness
+ 24 nodes            Community detection
+ 244 edges           Blind spot detection
+
+REST API (Django + DRF):
+
+POST /api/transactions/analyze/          Risk score for account
+GET  /api/transactions/graph/<id>/       Network metrics for account
 
 
-## Files
+## Project Structure
 
-generate.py        Synthetic Polish banking data (Faker, IBAN, UUID)
-load.py            Loads transactions into SQLite with schema validation
-queries.py         AML alert detection - 3 FATF typologies
-score.py           Additive risk scoring engine with audit trail
-sar.py             SAR draft generator for MEDIUM/HIGH risk accounts
-analysis.sql       5 advanced SQL queries with documented methodology
-run_analysis.py    Executes SQL queries, shows query plans and benchmarks
-graph_build.py     Builds directed transaction graph (NetworkX DiGraph)
-graph_analyze.py   PageRank, betweenness centrality, community detection
+generate.py          Synthetic Polish banking data (Faker, IBAN, UUID)
+load.py              Loads transactions into SQLite with schema validation
+queries.py           AML alert detection - 3 FATF typologies
+score.py             Additive risk scoring engine with audit trail
+sar.py               SAR draft generator for MEDIUM/HIGH risk accounts
+analysis.sql         5 advanced SQL queries with documented methodology
+run_analysis.py      Executes SQL queries, shows query plans and benchmarks
+graph_build.py       Builds directed transaction graph (NetworkX DiGraph)
+graph_analyze.py     PageRank, betweenness centrality, community detection
+
+aml_api/             Django project settings
+transactions/        Django app - API views and URL routing
+aml_engine/risk.py   Risk score lookup from aml.db
+aml_engine/graph.py  Graph metrics lookup from aml.db
+
+
+## REST API
+
+Start the server:
+
+  cd my-data-project
+  source venv/bin/activate
+  python manage.py runserver 0.0.0.0:8000
+
+Endpoint 1 - Risk Score:
+
+  POST /api/transactions/analyze/
+  Content-Type: application/json
+  {"account_id": "PL35494514930239454526246159"}
+
+  Response:
+  {
+    "account_id": "PL35494514930239454526246159",
+    "risk_score": 55,
+    "risk_level": "MEDIUM",
+    "signals": "structuring (8 txn, +40) | velocity (5 txn/day, +15)"
+  }
+
+Endpoint 2 - Graph Metrics:
+
+  GET /api/transactions/graph/PL35494514930239454526246159/
+
+  Response:
+  {
+    "account_id": "PL35494514930239454526246159",
+    "pagerank": 0.031461,
+    "betweenness": 0.0455,
+    "in_degree": 9,
+    "out_degree": 15,
+    "community_id": 0,
+    "network_role": "STANDARD"
+  }
 
 
 ## AML Typologies Detected
@@ -70,9 +120,6 @@ Design principle: no single signal should alone produce HIGH classification.
 
 ## Network Analysis
 
-graph_build.py and graph_analyze.py add a graph layer on top of the
-transaction data. Each account becomes a node, each money flow an edge.
-
 Metrics computed per account:
 
   PageRank        Importance in the network weighted by flow value
@@ -80,26 +127,20 @@ Metrics computed per account:
   In/Out degree   Consolidation vs distribution pattern
   Community ID    Cluster of accounts exchanging funds internally
 
-Network roles assigned:
+Network roles:
 
-  CONSOLIDATOR    High in-degree, high PageRank
-                  Funds flowing in from many sources
-  DISTRIBUTOR     High out-degree
-                  Funds dispersed to many recipients
-  HUB             High betweenness
-                  Intermediary between clusters - classic layering pattern
+  CONSOLIDATOR    High in-degree, high PageRank - funds consolidation
+  DISTRIBUTOR     High out-degree - funds dispersed to many recipients
+  HUB             High betweenness - intermediary, classic layering pattern
   CENTRAL         High PageRank without directional dominance
   STANDARD        No anomalous network pattern
 
-Key finding on synthetic data:
-  2 accounts flagged as CENTRAL/HUB by network analysis had NO AML alert
-  from transaction monitoring. Graph analysis surfaces blind spots that
-  rule-based transaction monitoring cannot detect.
+Key finding: 2 accounts flagged as CENTRAL/HUB by network analysis had
+NO alert from transaction monitoring - graph analysis surfaces blind spots
+that rule-based monitoring cannot detect.
 
 
 ## SQL Analysis - Techniques Demonstrated
-
-analysis.sql contains 5 queries with documented methodology:
 
   Query 1   CTE + CASE WHEN        Account profiling and segmentation
   Query 2   RANK() + SUM() OVER    Percentile ranking across population
@@ -107,33 +148,21 @@ analysis.sql contains 5 queries with documented methodology:
   Query 4   RANK() OVER            Transaction flow matrix, top pairs
   Query 5   LEFT JOIN + COALESCE   Integrated risk view with score join
 
-Each query includes rationale for technique selection and AML context.
-
 
 ## Index Benchmarking Results
 
-Measured on 412 transactions, SQLite 3.x, Python 3.13, ARM64 Android.
+  Query                     Before    After     Change
+  Account Profile (Q1)      3.60 ms   1.28 ms   -64%
+  Ranking/Percentiles (Q2)  1.09 ms   0.97 ms   -11%
+  Time Series / LAG (Q3)    1.44 ms   1.54 ms   +7%
+  Flow Matrix (Q4)          1.85 ms   1.95 ms   +5%
+  JOIN risk_scores (Q5)     1.05 ms   1.19 ms   +13%
 
-  Query                     Before    After     Change    Plan change
-  Account Profile (Q1)      3.60 ms   1.28 ms   -64%      FULL SCAN -> INDEX SCAN
-  Ranking/Percentiles (Q2)  1.09 ms   0.97 ms   -11%      INDEX SCAN
-  Time Series / LAG (Q3)    1.44 ms   1.54 ms   +7%       no change (optimal)
-  Flow Matrix (Q4)          1.85 ms   1.95 ms   +5%       INDEX SCAN
-  JOIN risk_scores (Q5)     1.05 ms   1.19 ms   +13%      no change
-
-Note: Q3-Q5 regression on small dataset is expected index overhead.
+Note: regression on small dataset is expected index overhead.
 At production scale (millions of rows), indexed queries show 10-100x gains.
-idx_timestamp unused in Q3 because full chronological scan is optimal
-for moving average window calculations.
-
-Indexes created:
-  idx_account_from      transactions(account_from)
-  idx_currency_amount   transactions(currency, amount)
-  idx_country           transactions(country)
-  idx_timestamp         transactions(timestamp)
 
 
-## Quickstart
+## Quickstart - Full Pipeline
 
   pip install faker rich datasette networkx matplotlib scipy
   python generate.py        generate synthetic transactions
@@ -146,16 +175,35 @@ Indexes created:
   python graph_analyze.py   network metrics + blind spot detection
 
 
+## Quickstart - API
+
+  pip install django djangorestframework django-cors-headers
+  python manage.py runserver 0.0.0.0:8000
+
+
 ## Optional: Browser UI
 
   datasette aml.db --port 8001
   open http://localhost:8001
 
 
+## Tech Stack
+
+  Python 3.13       Core language
+  SQLite            Local database (aml.db)
+  Django 6.0        REST API framework
+  Django REST       API serialization and routing
+  Framework
+  NetworkX          Graph construction and analysis
+  Faker             Synthetic data generation
+  Rich              Terminal output formatting
+  Datasette         SQL browser UI
+  Git               Version control
+
+
 ## Regulatory Basis
 
-  Polish AML Act       Ustawa z dnia 1 marca 2018 r. o przeciwdzialaniu
-                       praniu pieniedzy oraz finansowaniu terroryzmu
+  Polish AML Act       Ustawa z dnia 1 marca 2018 r.
                        Art. 72 - reporting threshold PLN 15,000
 
   FATF                 Recommendations 2012 (updated 2023)
@@ -169,10 +217,26 @@ Indexes created:
                        Polish FIU - SAR submission authority
 
 
+## Roadmap
+
+  [x] Synthetic transaction generation
+  [x] SQLite pipeline - Bronze/Silver/Gold layers (Medallion pattern)
+  [x] AML typology detection - structuring, velocity, high-risk countries
+  [x] Additive risk scoring engine
+  [x] SAR draft generator
+  [x] Advanced SQL analysis with index benchmarking
+  [x] Network graph analysis - PageRank, betweenness, community detection
+  [x] REST API - Django + DRF
+  [ ] GitHub Actions CI/CD
+  [ ] Deployment - Render/Railway
+  [ ] PostgreSQL migration
+  [ ] Graph metrics endpoint v2 - full account summary
+
+
 ## Author
 
 Leszek Gonera
 AML Analyst | Data Engineering background
-ICA Certified | SQL | Python | RegTech
+ICA Certified | SQL | Python | RegTech | Django
 
 https://github.com/goneraleszek2-ship-it
