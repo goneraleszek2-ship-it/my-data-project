@@ -25,3 +25,30 @@ def graph_metrics_view(request, account_id):
     if not metrics:
         return Response({"error": "Account not found in graph"}, status=404)
     return Response({"account_id": account_id, **metrics})
+@api_view(['GET'])
+def account_summary(request, account_id):
+    # Pobierz risk score
+    risk = get_risk(account_id)
+    
+    # Pobierz graph metrics
+    network = get_graph_metrics(account_id)
+    
+    # Zbuduj podsumowanie tekstowe
+    if network:
+        summary = (
+            f"{risk['level']} risk account, "
+            f"network role: {network['network_role']}"
+        )
+    else:
+        summary = f"{risk['level']} risk account, no network data"
+    
+    return Response({
+        "account_id": account_id,
+        "risk": {
+            "score":   risk["score"],
+            "level":   risk["level"],
+            "signals": risk["signals"]
+        },
+        "network": network if network else "no data",
+        "summary": summary
+    })

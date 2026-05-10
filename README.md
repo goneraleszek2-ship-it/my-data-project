@@ -4,7 +4,7 @@ End-to-end financial crime detection pipeline built in Python and SQL,
 exposing results via a REST API. Covers the full AML workflow: from raw
 transaction data through typology detection, risk scoring, SAR draft
 generation, SQL performance analysis, network graph analysis, to a
-queryable HTTP API.
+queryable HTTP API backed by PostgreSQL.
 
 Built as a portfolio project demonstrating the intersection of AML domain
 knowledge, data engineering, and backend development skills.
@@ -16,8 +16,8 @@ Data Pipeline:
 
 generate.py -> load.py -> queries.py -> score.py -> sar.py
     |              |           |             |          |
- 412 synthetic  SQLite     3 FATF       risk score  SAR draft
- transactions   aml.db    typologies    0-100        (.txt)
+ 412 synthetic  PostgreSQL  3 FATF       risk score  SAR draft
+ transactions   aml_db     typologies    0-100        (.txt)
 
 graph_build.py -> graph_analyze.py
     |                    |
@@ -25,16 +25,17 @@ graph_build.py -> graph_analyze.py
  24 nodes            Community detection
  244 edges           Blind spot detection
 
-REST API (Django + DRF):
+REST API (Django 6.0 + DRF):
 
-POST /api/transactions/analyze/          Risk score for account
-GET  /api/transactions/graph/<id>/       Network metrics for account
+POST /api/transactions/analyze/            Risk score for account
+GET  /api/transactions/graph/<id>/         Network metrics for account
+GET  /api/transactions/account/<id>/       Full account summary (aggregated)
 
 
 ## Project Structure
 
 generate.py          Synthetic Polish banking data (Faker, IBAN, UUID)
-load.py              Loads transactions into SQLite with schema validation
+load.py              Loads transactions into PostgreSQL with schema validation
 queries.py           AML alert detection - 3 FATF typologies
 score.py             Additive risk scoring engine with audit trail
 sar.py               SAR draft generator for MEDIUM/HIGH risk accounts
@@ -43,10 +44,10 @@ run_analysis.py      Executes SQL queries, shows query plans and benchmarks
 graph_build.py       Builds directed transaction graph (NetworkX DiGraph)
 graph_analyze.py     PageRank, betweenness centrality, community detection
 
-aml_api/             Django project settings
+aml_api/             Django project settings (.env based configuration)
 transactions/        Django app - API views and URL routing
-aml_engine/risk.py   Risk score lookup from aml.db
-aml_engine/graph.py  Graph metrics lookup from aml.db
+aml_engine/risk.py   Risk score lookup from PostgreSQL
+aml_engine/graph.py  Graph metrics lookup from PostgreSQL
 
 
 ## REST API
@@ -60,7 +61,6 @@ Start the server:
 Endpoint 1 - Risk Score:
 
   POST /api/transactions/analyze/
-  Content-Type: application/json
   {"account_id": "PL35494514930239454526246159"}
 
   Response:
@@ -85,6 +85,34 @@ Endpoint 2 - Graph Metrics:
     "community_id": 0,
     "network_role": "STANDARD"
   }
+
+Endpoint 3 - Full Account Summary (aggregated):
+
+  GET /api/transactions/account/PL06224328939123573761120204/
+
+  Response:
+  {
+    "account_id": "PL06224328939123573761120204",
+    "risk": {
+      "score": 36,
+      "level": "LOW",
+      "signals": "high-risk country (181,637, +36)"
+    },
+    "network": {
+      "pagerank": 0.044169,
+      "betweenness": 0.1522,
+      "in_degree": 12,
+      "out_degree": 15,
+      "community_id": 1,
+      "network_role": "HUB"
+    },
+    "summary": "LOW risk account, network role: HUB"
+  }
+
+Key finding: this account scores LOW by transaction rules but is the
+highest betweenness node in the network (0.1522) with exposure to
+high-risk jurisdictions (181k USD via RU/CY). Classic blind spot -
+rule-based monitoring misses network-level risk. Escalation required.
 
 
 ## AML Typologies Detected
@@ -136,8 +164,25 @@ Network roles:
   STANDARD        No anomalous network pattern
 
 Key finding: 2 accounts flagged as CENTRAL/HUB by network analysis had
-NO alert from transaction monitoring - graph analysis surfaces blind spots
+NO alert from transaction monitoring. Graph analysis surfaces blind spots
 that rule-based monitoring cannot detect.
+
+
+## Architectural Decisions
+
+Separation of concerns:
+  aml_engine/risk.py    answers "how risky is this account?" (rules)
+  aml_engine/graph.py   answers "what role does it play?" (graph math)
+  transactions/views.py orchestrates both - no business logic of its own
+
+Facade pattern:
+  GET /account/<id>/ aggregates risk + network into one response.
+  Frontend or analyst gets complete picture in a single request.
+  Individual endpoints remain available for systems needing partial data.
+
+Granularity vs convenience tradeoff:
+  Granular endpoints (/analyze/, /graph/) for systems needing one signal.
+  Aggregated endpoint (/account/) for human analysts and dashboards.
 
 
 ## SQL Analysis - Techniques Demonstrated
@@ -158,15 +203,34 @@ that rule-based monitoring cannot detect.
   Flow Matrix (Q4)          1.85 ms   1.95 ms   +5%
   JOIN risk_scores (Q5)     1.05 ms   1.19 ms   +13%
 
-Note: regression on small dataset is expected index overhead.
-At production scale (millions of rows), indexed queries show 10-100x gains.
+
+## Tech Stack
+
+  Python 3.13           Core language
+  PostgreSQL 18.2       Production database
+  Django 6.0            Web framework
+  Django REST Framework API layer
+  NetworkX              Graph construction and analysis
+  Faker                 Synthetic data generation
+  Rich                  Terminal output formatting
+  Datasette             SQL browser UI
+  python-dotenv         Secrets management
+  Git                   Version control
+
+
+## Security
+
+  Secrets managed via .env (not committed to repository)
+  .gitignore covers .env, venv/, __pycache__, *.pyc
+  PostgreSQL with dedicated user and password
+  ALLOWED_HOSTS configured
 
 
 ## Quickstart - Full Pipeline
 
   pip install faker rich datasette networkx matplotlib scipy
   python generate.py        generate synthetic transactions
-  python load.py            load into SQLite
+  python load.py            load into PostgreSQL
   python queries.py         AML alert detection
   python score.py           risk scoring
   python sar.py             SAR draft generation
@@ -177,28 +241,28 @@ At production scale (millions of rows), indexed queries show 10-100x gains.
 
 ## Quickstart - API
 
-  pip install django djangorestframework django-cors-headers
+  cp .env.example .env      configure database credentials
+  pip install django djangorestframework django-cors-headers psycopg2-binary python-dotenv
+  python manage.py migrate
   python manage.py runserver 0.0.0.0:8000
 
 
-## Optional: Browser UI
+## Roadmap
 
-  datasette aml.db --port 8001
-  open http://localhost:8001
-
-
-## Tech Stack
-
-  Python 3.13       Core language
-  SQLite            Local database (aml.db)
-  Django 6.0        REST API framework
-  Django REST       API serialization and routing
-  Framework
-  NetworkX          Graph construction and analysis
-  Faker             Synthetic data generation
-  Rich              Terminal output formatting
-  Datasette         SQL browser UI
-  Git               Version control
+  [x] Synthetic transaction generation
+  [x] PostgreSQL pipeline - Bronze/Silver/Gold layers (Medallion pattern)
+  [x] AML typology detection - structuring, velocity, high-risk countries
+  [x] Additive risk scoring engine
+  [x] SAR draft generator
+  [x] Advanced SQL analysis with index benchmarking
+  [x] Network graph analysis - PageRank, betweenness, community detection
+  [x] REST API - Django + DRF (3 endpoints)
+  [x] PostgreSQL migration from SQLite
+  [x] Secrets management via .env
+  [ ] Cross-signal alert - flag LOW risk + HUB network role contradiction
+  [ ] GitHub Actions CI/CD
+  [ ] Deployment - Render/Railway
+  [ ] Unit tests
 
 
 ## Regulatory Basis
@@ -217,26 +281,10 @@ At production scale (millions of rows), indexed queries show 10-100x gains.
                        Polish FIU - SAR submission authority
 
 
-## Roadmap
-
-  [x] Synthetic transaction generation
-  [x] SQLite pipeline - Bronze/Silver/Gold layers (Medallion pattern)
-  [x] AML typology detection - structuring, velocity, high-risk countries
-  [x] Additive risk scoring engine
-  [x] SAR draft generator
-  [x] Advanced SQL analysis with index benchmarking
-  [x] Network graph analysis - PageRank, betweenness, community detection
-  [x] REST API - Django + DRF
-  [ ] GitHub Actions CI/CD
-  [ ] Deployment - Render/Railway
-  [ ] PostgreSQL migration
-  [ ] Graph metrics endpoint v2 - full account summary
-
-
 ## Author
 
 Leszek Gonera
 AML Analyst | Data Engineering background
-ICA Certified | SQL | Python | RegTech | Django
+ICA Certified | SQL | Python | RegTech | Django | PostgreSQL
 
 https://github.com/goneraleszek2-ship-it
