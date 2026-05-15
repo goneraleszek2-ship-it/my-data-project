@@ -117,8 +117,16 @@ con.execute("""
     )
 """)
 
+# Upsert — aktualizuj jeśli konto już istnieje, wstaw jeśli nowe
+# ON CONFLICT DO UPDATE zapewnia idempotentność w PostgreSQL
 con.executemany("""
-    INSERT OR REPLACE INTO risk_scores VALUES (?,?,?,?)
+    INSERT INTO risk_scores (account, score, level, signals)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT (account)
+    DO UPDATE SET
+        score   = excluded.score,
+        level   = excluded.level,
+        signals = excluded.signals
 """, [
     (acc, score,
      "HIGH" if score >= 70 else "MEDIUM" if score >= 40 else "LOW",
