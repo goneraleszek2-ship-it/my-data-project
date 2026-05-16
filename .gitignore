@@ -4,3 +4,4 @@ aml.db
 venv/
 *.pyc
 __pycache__/
+.env.render
