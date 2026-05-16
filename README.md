@@ -52,6 +52,30 @@ aml_engine/graph.py  Graph metrics lookup from PostgreSQL
 
 ## REST API
 
+## Live API
+
+Deployed on Render — no setup required:
+
+  POST https://aml-pipeline.onrender.com/api/transactions/analyze/
+  GET  https://aml-pipeline.onrender.com/api/transactions/graph/<account_id>/
+  GET  https://aml-pipeline.onrender.com/api/transactions/account/<account_id>/
+
+Example — full account summary with blind spot detection:
+
+  curl https://aml-pipeline.onrender.com/api/transactions/account/PL06224328939123573761120204/
+
+Response:
+  {
+    "account_id": "PL06224328939123573761120204",
+    "risk": {"score": 36, "level": "LOW", "signals": "high-risk country (181,637, +36)"},
+    "network": {"pagerank": 0.044169, "betweenness": 0.1522, "network_role": "HUB"},
+    "blind_spot": true,
+    "summary": "LOW risk account, network role: HUB — BLIND SPOT: escalation recommended"
+  }
+
+Note: free tier spins down after inactivity — first request may take 30-50 seconds.
+
+
 Start the server:
 
   cd my-data-project
